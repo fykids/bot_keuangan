@@ -1,4 +1,5 @@
 import sqlite3
+import os
 from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -19,7 +20,9 @@ import logging
 import urllib.request
 
 # Put your bot token in one place so we can call Telegram HTTP API directly
-BOT_TOKEN = "8511173598:AAEr1bHAvtNSG_VeXHNMQXRq1B6N0g6oUxw"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN environment variable not set! Set it in Render/Railway/ENV.")
 
 DB = "db_keuangan.db"
 
@@ -597,7 +600,7 @@ logging.getLogger("telegram").setLevel(logging.WARNING)
 
 # Create a custom request object with longer timeouts (30s instead of default)
 request = HTTPXRequest(connect_timeout=30.0, read_timeout=30.0, write_timeout=30.0, pool_timeout=30.0)
-app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
+app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 # Global error handler to ensure exceptions are logged by the application
 async def _global_error_handler(update: Update | None, context: ContextTypes.DEFAULT_TYPE):
@@ -657,29 +660,6 @@ RETRY_DELAY = 5
 
 from telegram import error as tg_error
 
-for attempt in range(1, MAX_RETRIES + 1):
-    try:
-        # Try to remove any webhook first (helps if bot was previously set to webhook)
-        try:
-            # First, try synchronous HTTP delete via Telegram API (reliable and doesn't require awaiting)
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
-            with urllib.request.urlopen(url, timeout=10) as resp:
-                logging.info("deleteWebhook response: %s", resp.read().decode(errors='ignore'))
-        except Exception as e:
-            logging.info("deleteWebhook HTTP call failed (continuing): %s", e)
-        # Note: don't call `app.bot.delete_webhook()` here because it's a coroutine
-        # and cannot be awaited in this synchronous context. We already removed
-        # any webhook via the HTTP API above.
-
-        # Start polling and drop pending updates which can help avoid conflicts
-        app.run_polling(drop_pending_updates=True)
-        break
-    except tg_error.Conflict:
-        print(f"[Attempt {attempt}] Conflict: another getUpdates is running.")
-        if attempt < MAX_RETRIES:
-            print(f"Waiting {RETRY_DELAY}s and retrying... (stop other instances first)")
-            time.sleep(RETRY_DELAY)
-            continue
-        else:
-            print("Max retries reached. Make sure no other bot instance is running or remove webhooks.")
-            raise
+if __name__ == "__main__":
+    logging.info("Bot keuangan berjalan...")
+    app.run_polling()
